@@ -12,7 +12,7 @@
 Name "小狼毫 ${WEASEL_VERSION}"
 
 ; The file to write
-OutFile "archives\weasel-${WEASEL_BUILD}-installer.exe"
+OutFile "archives\mrhso-weasel-${WEASEL_BUILD}-installer.exe"
 
 VIProductVersion "${WEASEL_BUILD}"
 VIAddVersionKey /LANG=2052 "ProductName" "小狼毫"

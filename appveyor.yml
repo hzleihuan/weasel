@@ -29,8 +29,8 @@ after_build:
   - appveyor.after_build.bat
 
 artifacts:
-  - path: output\archives\weasel-0.9.30.0-installer.exe
+  - path: output\archives\mrhso-weasel-0.9.30.0-installer.exe
     name: Weasel
 
-  - path: output\archives\weasel-expansion-0.9.19.0.exe
+  - path: output\archives\mrhso-weasel-expansion-0.9.19.0.exe
     name: Weasel Expansion

@@ -16,7 +16,7 @@
 Name "${PACKAGE_NAME} ${PACKAGE_VERSION}"
 
 ; The file to write
-OutFile "archives\${PACKAGE_ID}-${PACKAGE_BUILD}.exe"
+OutFile "archives\mrhso-weasel-expansion-${PACKAGE_BUILD}.exe"
 
 VIProductVersion "${PACKAGE_BUILD}"
 VIAddVersionKey /LANG=2052 "ProductName" "${PACKAGE_NAME}"
