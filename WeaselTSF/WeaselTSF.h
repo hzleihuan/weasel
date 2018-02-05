@@ -60,7 +60,7 @@ public:
 	/* Composition */
 	void _StartComposition(ITfContext *pContext, BOOL fCUASWorkaroundEnabled);
 	void _EndComposition(ITfContext *pContext);
-	BOOL _ShowInlinePreedit(ITfContext *pContext, const weasel::Context &context);
+	BOOL _ShowInlinePreedit(ITfContext *pContext, const std::shared_ptr<weasel::Context> context);
 	void _UpdateComposition(ITfContext *pContext);
 	BOOL _IsComposing();
 	void _SetComposition(ITfComposition *pComposition);
@@ -93,6 +93,10 @@ private:
 	
 	BOOL _InsertText(ITfContext *pContext, const std::wstring& ext);
 
+	bool isImmersive() const {
+		return (_activateFlags & TF_TMF_IMMERSIVEMODE) != 0;
+	}
+
 	ITfThreadMgr *_pThreadMgr;
 	TfClientId _tfClientId;
 	DWORD _dwThreadMgrEventSinkCookie;
@@ -116,4 +120,5 @@ private:
 
 	/* Weasel Related */
 	weasel::Client m_client;
+	DWORD _activateFlags;
 };

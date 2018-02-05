@@ -162,6 +162,11 @@ program_files:
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Weasel" "NoRepair" 1
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
+  ; Write autorun key
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "WeaselServer" "$INSTDIR\WeaselServer.exe"
+  ; Start WeaselServer
+  Exec "$INSTDIR\WeaselServer.exe"
+
 SectionEnd
 
 ; Optional section (can be disabled by the user)
@@ -202,6 +207,7 @@ Section "Uninstall"
 
   ; Remove registry keys
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Weasel"
+  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "WeaselServer"
   DeleteRegKey HKLM SOFTWARE\Rime
 
   ; Remove files and uninstaller

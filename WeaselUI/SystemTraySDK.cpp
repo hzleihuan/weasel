@@ -54,7 +54,7 @@ static char THIS_FILE[]=__FILE__;
 // TrayIcon per application
 CSystemTray* CSystemTray::m_pThis = NULL;
 
-const UINT CSystemTray::m_nTimerID    = 4567;
+const UINT_PTR CSystemTray::m_nTimerID    = 4567;
 UINT CSystemTray::m_nMaxTooltipLength  = 64;     // This may change...
 const UINT CSystemTray::m_nTaskbarCreatedMsg = ::RegisterWindowMessage(_T("TaskbarCreated"));
 HWND  CSystemTray::m_hWndInvisible;
@@ -186,7 +186,7 @@ BOOL CSystemTray::Create(HINSTANCE hInst, HWND hParent, UINT uCallbackMessage,
     m_tnd.uCallbackMessage = uCallbackMessage;
 
 // 2007-11-14 GONG
-    _tcsncpy(m_tnd.szTip, szToolTip, m_nMaxTooltipLength);
+    _tcsncpy_s(m_tnd.szTip, _countof(m_tnd.szTip), szToolTip, m_nMaxTooltipLength);
 
 #ifdef SYSTEMTRAY_USEW2K
     if (m_bWin2K && szBalloonTip)
@@ -213,9 +213,9 @@ BOOL CSystemTray::Create(HINSTANCE hInst, HWND hParent, UINT uCallbackMessage,
 
         m_tnd.uFlags |= NIF_INFO;
 
-        _tcsncpy(m_tnd.szInfo, szBalloonTip, 255);
+        _tcsncpy_s(m_tnd.szInfo, _countof(m_tnd.szInfo), szBalloonTip, 255);
         if (szBalloonTitle)
-            _tcsncpy(m_tnd.szInfoTitle, szBalloonTitle, 63);
+            _tcsncpy_s(m_tnd.szInfoTitle, _countof(m_tnd.szInfoTitle), szBalloonTitle, 63);
         else
             m_tnd.szInfoTitle[0] = _T('\0');
         m_tnd.uTimeout    = uBalloonTimeout * 1000; // convert time to ms
@@ -510,7 +510,7 @@ BOOL CSystemTray::SetTooltipText(LPCTSTR pszTip)
         return FALSE;
 
     m_tnd.uFlags = NIF_TIP;
-    _tcsncpy(m_tnd.szTip, pszTip, m_nMaxTooltipLength-1);
+    _tcsncpy_s(m_tnd.szTip, _countof(m_tnd.szTip), pszTip, m_nMaxTooltipLength-1);
 
     if (m_bHidden)
         return TRUE;
@@ -544,7 +544,7 @@ LPTSTR CSystemTray::GetTooltipText() const
 //#else
 //    strncpy(strBuffer, m_tnd.szTip, m_nMaxTooltipLength-1);
 //#endif
-	_tcsncpy(strBuffer, m_tnd.szTip, m_nMaxTooltipLength-1);
+	_tcsncpy_s(strBuffer, _countof(strBuffer), m_tnd.szTip, m_nMaxTooltipLength-1);
 
     return strBuffer;
 }
@@ -609,9 +609,9 @@ BOOL CSystemTray::ShowBalloon(LPCTSTR szText,
 
 
     m_tnd.uFlags = NIF_INFO;
-    _tcsncpy(m_tnd.szInfo, szText, 256);
+    _tcsncpy_s(m_tnd.szInfo, _countof(m_tnd.szInfo), szText, 256);
     if (szTitle)
-        _tcsncpy(m_tnd.szInfoTitle, szTitle, 64);
+        _tcsncpy_s(m_tnd.szInfoTitle, _countof(m_tnd.szInfoTitle), szTitle, 64);
     else
         m_tnd.szInfoTitle[0] = _T('\0');
     m_tnd.dwInfoFlags = dwIcon;
@@ -794,7 +794,7 @@ LRESULT CSystemTray::OnSettingChange(UINT uFlags, LPCTSTR lpszSection)
 }
 #endif
 
-LRESULT CSystemTray::OnTrayNotification(UINT wParam, LONG lParam) 
+LRESULT CSystemTray::OnTrayNotification(WPARAM wParam, LPARAM lParam)
 {
     //Return quickly if its not for this tray icon
     if (wParam != m_tnd.uID)

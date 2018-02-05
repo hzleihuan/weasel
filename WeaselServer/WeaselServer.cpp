@@ -4,6 +4,7 @@
 
 #include "stdafx.h"
 #include "resource.h"
+#include "WeaselService.h"
 #include <WeaselIPC.h>
 #include <WeaselUI.h>
 #include <RimeWithWeasel.h>
@@ -14,119 +15,53 @@
 
 CAppModule _Module;
 
+typedef enum PROCESS_DPI_AWARENESS {
+	PROCESS_DPI_UNAWARE = 0,
+	PROCESS_SYSTEM_DPI_AWARE = 1,
+	PROCESS_PER_MONITOR_DPI_AWARE = 2
+} PROCESS_DPI_AWARENESS;
 
-class WeaselServerApp {
-public:
-	static bool execute(const std::wstring &cmd, const std::wstring &args)
-	{
-		return (int)ShellExecuteW(NULL, NULL, cmd.c_str(), args.c_str(), NULL, SW_SHOWNORMAL) > 32;
-	}
+typedef enum MONITOR_DPI_TYPE {
+	MDT_EFFECTIVE_DPI = 0,
+	MDT_ANGULAR_DPI = 1,
+	MDT_RAW_DPI = 2,
+	MDT_DEFAULT = MDT_EFFECTIVE_DPI
+} MONITOR_DPI_TYPE;
 
-	static bool explore(const std::wstring &path)
-	{
-		return (int)ShellExecuteW(NULL, L"explore", path.c_str(), NULL, NULL, SW_SHOWNORMAL) > 32;
-	}
-
-	static bool open(const std::wstring &path)
-	{
-		return (int)ShellExecuteW(NULL, L"open", path.c_str(), NULL, NULL, SW_SHOWNORMAL) > 32;
-	}
-
-	static bool check_update()
-	{
-		// when checked manually, show testing versions too
-		std::string feed_url = GetCustomResource("ManualUpdateFeedURL", "APPCAST");
-		if (!feed_url.empty())
-		{
-			win_sparkle_set_appcast_url(feed_url.c_str());
-		}
-		win_sparkle_check_update_with_ui();
-		return true;
-	}
-
-	static std::wstring install_dir()
-	{
-		WCHAR exe_path[MAX_PATH] = {0};
-		GetModuleFileNameW(GetModuleHandle(NULL), exe_path, _countof(exe_path));
-		std::wstring dir(exe_path);
-		size_t pos = dir.find_last_of(L"\\");
-		dir.resize(pos);
-		return dir;
-	}
-
-public:
-	WeaselServerApp();
-	~WeaselServerApp();
-	int Run();
-
-protected:
-	void SetupMenuHandlers();
-
-	weasel::Server m_server;
-	weasel::UI m_ui;
-	std::unique_ptr<RimeWithWeaselHandler> m_handler;
-};
-
-WeaselServerApp::WeaselServerApp()
+inline bool IsWindows8Point1OrGreater()
 {
-	m_handler.reset(new RimeWithWeaselHandler(&m_ui));
-	m_server.SetRequestHandler(m_handler.get());
-	SetupMenuHandlers();
-}
-
-WeaselServerApp::~WeaselServerApp()
-{
-}
-
-int WeaselServerApp::Run()
-{
-	if (!m_server.Start())
-		return -1;
-
-	//win_sparkle_set_appcast_url("http://localhost:8000/weasel/update/appcast.xml");
-	win_sparkle_set_registry_path("Software\\Rime\\Weasel\\Updates");
-	win_sparkle_init();
-	m_ui.Create(m_server.GetHWnd());
-	m_handler->Initialize();
-
-	int ret = m_server.Run();
-
-	m_handler->Finalize();
-	m_ui.Destroy();
-	win_sparkle_cleanup();
-
-	return ret;
-}
-
-void WeaselServerApp::SetupMenuHandlers()
-{
-	std::wstring dir(install_dir());
-	m_server.AddMenuHandler(ID_WEASELTRAY_QUIT, [this] { return m_server.Stop() == 0; });
-	m_server.AddMenuHandler(ID_WEASELTRAY_DEPLOY, std::bind(execute, dir + L"\\WeaselDeployer.exe", std::wstring(L"/deploy")));
-	m_server.AddMenuHandler(ID_WEASELTRAY_SETTINGS, std::bind(execute, dir + L"\\WeaselDeployer.exe", std::wstring()));
-	m_server.AddMenuHandler(ID_WEASELTRAY_DICT_MANAGEMENT, std::bind(execute, dir + L"\\WeaselDeployer.exe", std::wstring(L"/dict")));
-	m_server.AddMenuHandler(ID_WEASELTRAY_SYNC, std::bind(execute, dir + L"\\WeaselDeployer.exe", std::wstring(L"/sync")));
-	m_server.AddMenuHandler(ID_WEASELTRAY_WIKI, std::bind(open, L"https://github.com/rime/home/wiki/UserGuide"));
-	m_server.AddMenuHandler(ID_WEASELTRAY_HOMEPAGE, std::bind(open, L"http://rime.im/"));
-	m_server.AddMenuHandler(ID_WEASELTRAY_FORUM, std::bind(open, L"http://tieba.baidu.com/f?kw=rime"));
-	m_server.AddMenuHandler(ID_WEASELTRAY_CHECKUPDATE, check_update);
-	m_server.AddMenuHandler(ID_WEASELTRAY_INSTALLDIR, std::bind(explore, dir));
-	m_server.AddMenuHandler(ID_WEASELTRAY_USERCONFIG, std::bind(explore, WeaselUserDataPath()));
+	OSVERSIONINFOEX osvi = {sizeof(osvi), 6, 3, 0, 0, {0}, 0, 0};
+	return VerifyVersionInfo(&osvi, VER_MAJORVERSION | VER_MINORVERSION | VER_SERVICEPACKMAJOR,
+		VerSetConditionMask(VerSetConditionMask(VerSetConditionMask(
+			0, VER_MAJORVERSION, VER_GREATER_EQUAL),
+			   VER_MINORVERSION, VER_GREATER_EQUAL),
+			   VER_SERVICEPACKMAJOR, VER_GREATER_EQUAL)) != FALSE;
 }
 
 int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lpstrCmdLine, int nCmdShow)
 {
+	// Set DPI awareness (Windows 8.1+)
+	if (IsWindows8Point1OrGreater())
+	{
+		using PSPDA = HRESULT (WINAPI *)(PROCESS_DPI_AWARENESS);
+		HMODULE shcore_module = ::LoadLibrary(_T("shcore.dll"));
+		if (shcore_module != NULL)
+		{
+			PSPDA SetProcessDpiAwareness = (PSPDA)::GetProcAddress(shcore_module, "SetProcessDpiAwareness");
+			SetProcessDpiAwareness(PROCESS_SYSTEM_DPI_AWARE);
+			::FreeLibrary(shcore_module);
+		}
+	}
+
 	// 防止服务进程开启输入法
 	ImmDisableIME(-1);
 
+	WCHAR user_name[20] = {0};
+	DWORD size = _countof(user_name);
+	GetUserName(user_name, &size);
+	if (!_wcsicmp(user_name, L"SYSTEM"))
 	{
-		WCHAR user_name[20] = {0};
-		DWORD size = _countof(user_name);
-		GetUserName(user_name, &size);
-		if (!_wcsicmp(user_name, L"SYSTEM"))
-		{
-			return 1;
-		}
+		return 1;
 	}
 
 	HRESULT hRes = ::CoInitialize(NULL);
@@ -177,9 +112,15 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
 	CreateDirectory(WeaselUserDataPath().c_str(), NULL);
 
 	int nRet = 0;
+
 	try
 	{
 		WeaselServerApp app;
+		if (IsWindowsVistaOrGreater())
+		{
+			PRAR RegisterApplicationRestart = (PRAR)::GetProcAddress(::GetModuleHandle(_T("kernel32.dll")), "RegisterApplicationRestart");
+			RegisterApplicationRestart(NULL, 0);
+		}
 		nRet = app.Run();
 	}
 	catch (...)

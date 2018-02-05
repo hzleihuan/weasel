@@ -27,16 +27,25 @@ namespace weasel
 		bool GetResponseData(ResponseHandler const& handler);
 
 	protected:
-		HWND _GetServerWindow(LPCWSTR windowClass);
+		void _ConnectPipe(const wchar_t* pipeName);
 		void _InitializeClientInfo();
 		bool _WriteClientInfo();
 
-		bool _Connected() const { return serverWnd != NULL; }
+		LRESULT _SendMessage(WEASEL_IPC_COMMAND Msg, DWORD wParam, DWORD lParam);
+
+		bool _Connected() const { return pipe != INVALID_HANDLE_VALUE; }
 		bool _Active() const { return _Connected() && session_id != 0; }
+
+		inline WCHAR* _GetSendBuffer() const {
+			return reinterpret_cast<WCHAR*>((char *)buffer.get() + sizeof(PipeMessage));
+		}
 
 	private:
 		UINT session_id;
-		HWND serverWnd;
+		HANDLE pipe;
+		bool has_cnt;
+
+		std::unique_ptr<char[]> buffer;
 		std::wstring app_name;
 		bool is_ime;
 	};

@@ -49,4 +49,16 @@
 
 #pragma warning(default : 4996)
 
+inline bool IsWindowsVistaOrGreater()
+{
+	OSVERSIONINFOEX osvi = {sizeof(osvi), 6, 0, 0, 0, {0}, 0, 0};
+	return VerifyVersionInfo(&osvi, VER_MAJORVERSION | VER_MINORVERSION | VER_SERVICEPACKMAJOR,
+		VerSetConditionMask(VerSetConditionMask(VerSetConditionMask(
+			0, VER_MAJORVERSION, VER_GREATER_EQUAL),
+			VER_MINORVERSION, VER_GREATER_EQUAL),
+			VER_SERVICEPACKMAJOR, VER_GREATER_EQUAL)) != FALSE;
+}
+
+typedef HRESULT (WINAPI *PRAR)(PCWSTR, DWORD);
+
 extern CAppModule _Module;

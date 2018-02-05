@@ -2,14 +2,15 @@
 #include "WeaselClientImpl.h"
 #include <StringAlgorithm.hpp>
 
-using namespace boost::interprocess;
 using namespace weasel;
 
 ClientImpl::ClientImpl()
 	: session_id(0),
-	  serverWnd(NULL),
-	  is_ime(false)
+	  pipe(INVALID_HANDLE_VALUE),
+	  is_ime(false),
+	  has_cnt(false)
 {
+	buffer = std::make_unique<char[]>(WEASEL_IPC_SHARED_MEMORY_SIZE);
 	_InitializeClientInfo();
 }
 
@@ -52,17 +53,10 @@ void ClientImpl::_InitializeClientInfo()
 
 bool ClientImpl::Connect(ServerLauncher const& launcher)
 {
-	serverWnd = _GetServerWindow(WEASEL_IPC_WINDOW);
-	if (!serverWnd && launcher)
-	{
-		// 启动服务进程
-		if (!launcher())
-		{
-			serverWnd = NULL;
-			return false;
-		}
-		serverWnd = _GetServerWindow(WEASEL_IPC_WINDOW);
-	}
+	auto pipe_name = GetPipeName();
+
+	_ConnectPipe(pipe_name.c_str());
+
 	return _Connected();
 }
 
@@ -70,14 +64,16 @@ void ClientImpl::Disconnect()
 {
 	if (_Active())
 		EndSession();
-	serverWnd = NULL;
+	DisconnectNamedPipe(pipe);
+	CloseHandle(pipe);
+	pipe = INVALID_HANDLE_VALUE;
 }
 
 void ClientImpl::ShutdownServer()
 {
 	if (_Connected())
 	{
-		SendMessage(serverWnd, WEASEL_IPC_SHUTDOWN_SERVER, 0, 0);
+		_SendMessage(WEASEL_IPC_SHUTDOWN_SERVER, 0, 0);
 	}
 }
 
@@ -86,7 +82,7 @@ bool ClientImpl::ProcessKeyEvent(KeyEvent const& keyEvent)
 	if (!_Active())
 		return false;
 
-	LRESULT ret = SendMessage(serverWnd, WEASEL_IPC_PROCESS_KEY_EVENT, keyEvent, session_id);
+	LRESULT ret = _SendMessage(WEASEL_IPC_PROCESS_KEY_EVENT, keyEvent, session_id);
 	return ret != 0;
 }
 
@@ -95,7 +91,7 @@ bool ClientImpl::CommitComposition()
 	if (!_Active())
 		return false;
 
-	LRESULT ret = SendMessage(serverWnd, WEASEL_IPC_COMMIT_COMPOSITION, 0, session_id);
+	LRESULT ret = _SendMessage(WEASEL_IPC_COMMIT_COMPOSITION, 0, session_id);
 	return ret != 0;
 }
 
@@ -104,7 +100,7 @@ bool ClientImpl::ClearComposition()
 	if (!_Active())
 		return false;
 
-	LRESULT ret = SendMessage(serverWnd, WEASEL_IPC_CLEAR_COMPOSITION, 0, session_id);
+	LRESULT ret = _SendMessage(WEASEL_IPC_CLEAR_COMPOSITION, 0, session_id);
 	return ret != 0;
 }
 
@@ -131,18 +127,18 @@ void ClientImpl::UpdateInputPosition(RECT const& rc)
 	int height = max(0, min(127, (rc.bottom - rc.top) >> hi_res));
 	DWORD compressed_rect = ((hi_res & 0x01) << 31) | ((height & 0x7f) << 24) | 
 		                    ((top & 0xfff) << 12) | (left & 0xfff);
-	PostMessage(serverWnd, WEASEL_IPC_UPDATE_INPUT_POS, compressed_rect, session_id);
+	_SendMessage(WEASEL_IPC_UPDATE_INPUT_POS, compressed_rect, session_id);
 }
 
 void ClientImpl::FocusIn()
 {
 	DWORD client_caps = 0;  /* TODO */
-	PostMessage(serverWnd, WEASEL_IPC_FOCUS_IN, client_caps, session_id);
+	_SendMessage(WEASEL_IPC_FOCUS_IN, client_caps, session_id);
 }
 
 void ClientImpl::FocusOut()
 {
-	PostMessage(serverWnd, WEASEL_IPC_FOCUS_OUT, 0, session_id);
+	_SendMessage(WEASEL_IPC_FOCUS_OUT, 0, session_id);
 }
 
 void ClientImpl::StartSession()
@@ -154,28 +150,29 @@ void ClientImpl::StartSession()
 		return;
 
 	_WriteClientInfo();
-	UINT ret = SendMessage(serverWnd, WEASEL_IPC_START_SESSION, 0, 0);
+	has_cnt = true;
+	UINT ret = _SendMessage(WEASEL_IPC_START_SESSION, 0, 0);
 	session_id = ret;
 }
 
 void ClientImpl::EndSession()
 {
 	if (_Connected())
-		PostMessage(serverWnd, WEASEL_IPC_END_SESSION, 0, session_id);
+		_SendMessage(WEASEL_IPC_END_SESSION, 0, session_id);
 	session_id = 0;
 }
 
 void ClientImpl::StartMaintenance()
 {
 	if (_Connected())
-		SendMessage(serverWnd, WEASEL_IPC_START_MAINTENANCE, 0, 0);
+		_SendMessage(WEASEL_IPC_START_MAINTENANCE, 0, 0);
 	session_id = 0;
 }
 
 void ClientImpl::EndMaintenance()
 {
 	if (_Connected())
-		SendMessage(serverWnd, WEASEL_IPC_END_MAINTENANCE, 0, 0);
+		_SendMessage(WEASEL_IPC_END_MAINTENANCE, 0, 0);
 	session_id = 0;
 }
 
@@ -184,89 +181,115 @@ bool ClientImpl::Echo()
 	if (!_Active())
 		return false;
 
-	UINT serverEcho = SendMessage(serverWnd, WEASEL_IPC_ECHO, 0, session_id);
+	UINT serverEcho = _SendMessage(WEASEL_IPC_ECHO, 0, session_id);
 	return (serverEcho == session_id);
 }
 
 bool ClientImpl::GetResponseData(ResponseHandler const& handler)
 {
-	if (!handler)
-	{
-		return false;
-	}
-	try
-	{
-		windows_shared_memory shm(open_only, WEASEL_IPC_SHARED_MEMORY, read_only);
-		mapped_region region(shm, read_only, WEASEL_IPC_METADATA_SIZE,
-			WEASEL_IPC_SHARED_MEMORY_SIZE - WEASEL_IPC_METADATA_SIZE);
-		return handler((LPWSTR)region.get_address(), WEASEL_IPC_BUFFER_LENGTH);
-	}
-	catch (interprocess_exception& /*ex*/)
-	{
+	if (!handler) {
 		return false;
 	}
 
-	return false;
+	return handler((LPWSTR)buffer.get(), WEASEL_IPC_BUFFER_LENGTH);
 }
+
+void ClientImpl::_ConnectPipe(const wchar_t * pipeName)
+{
+	bool err = false;
+	DWORD connectErr;
+	for (;;) {
+		pipe = CreateFile(pipeName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+
+		if (pipe != INVALID_HANDLE_VALUE) {
+			// connected to the pipe
+			break;
+		}
+		// being busy is not really an error since we just need to wait.
+		if ((connectErr = GetLastError()) != ERROR_PIPE_BUSY) {
+			
+			err = true; // otherwise, pipe creation fails
+			break;
+		}
+		// All pipe instances are busy, so wait for 2 seconds.
+		if (!WaitNamedPipe(pipeName, 2000)) {
+			err = true;
+			break;
+		}
+	}
+
+	if (!err) {
+		// The pipe is connected; change to message-read mode.
+		DWORD mode = PIPE_READMODE_MESSAGE;
+		if (!SetNamedPipeHandleState(pipe, &mode, NULL, NULL)) {
+			err = true;
+		}
+	}
+
+	// the pipe is created, but errors happened, destroy it.
+	if (err && pipe != INVALID_HANDLE_VALUE) {
+		DisconnectNamedPipe(pipe);
+		CloseHandle(pipe);
+		pipe = INVALID_HANDLE_VALUE;
+	}
+}
+
 
 bool ClientImpl::_WriteClientInfo()
 {
-	WCHAR* buffer = NULL;
-	try
+	WCHAR* buffer = _GetSendBuffer();
+	DWORD written = 0;
+
+	memset(buffer, 0, WEASEL_IPC_BUFFER_SIZE);
+	wbufferstream bs(buffer, WEASEL_IPC_BUFFER_LENGTH);
+	bs << L"action=session\n";
+	bs << L"session.client_app=" << app_name.c_str() << L"\n";
+	bs << L"session.client_type=" << (is_ime ? L"ime" : L"tsf") << L"\n";
+	bs << L".\n";
+	if (!bs.good())
 	{
-		windows_shared_memory shm(open_only, WEASEL_IPC_SHARED_MEMORY, read_write);
-		mapped_region region(shm, read_write, WEASEL_IPC_METADATA_SIZE,
-			WEASEL_IPC_SHARED_MEMORY_SIZE - WEASEL_IPC_METADATA_SIZE);
-		buffer = (LPWSTR)region.get_address();
-		if (!buffer)
-		{
-			return false;
-		}
-		memset(buffer, 0, WEASEL_IPC_BUFFER_SIZE);
-		wbufferstream bs(buffer, WEASEL_IPC_BUFFER_LENGTH);
-		bs << L"action=session\n";
-		bs << L"session.client_app=" << app_name.c_str() << L"\n";
-		bs << L"session.client_type=" << (is_ime ? L"ime" : L"tsf") << L"\n";
-		bs << L".\n";
-		if (!bs.good())
-		{
-			// response text toooo long!
-			return false;
-		}
-	}
-	catch (interprocess_exception& /*ex*/)
-	{
+		// response text toooo long!
 		return false;
 	}
 
 	return true;
 }
 
-HWND ClientImpl::_GetServerWindow(LPCWSTR windowClass)
+
+LRESULT ClientImpl::_SendMessage(WEASEL_IPC_COMMAND Msg, DWORD wParam, DWORD lParam)
 {
-	if (!windowClass)
-	{
-		return NULL;
+	PipeMessage msg{ Msg, wParam, lParam };
+	DWORD result = 0;
+	DWORD read = 0, written = 0;
+	DWORD errCode;
+	char *buffer_ptr = buffer.get();
+	DWORD write_len = has_cnt ? WEASEL_IPC_SHARED_MEMORY_SIZE : sizeof(PipeMessage);
+
+	//memcpy(buffer, &msg, sizeof(PipeMessage));
+	*reinterpret_cast<PipeMessage *>(buffer_ptr) = msg;
+
+	if (!WriteFile(pipe, buffer_ptr, write_len, &written, NULL)) {
+		return 0;
 	}
-	try
+	has_cnt = false;
+
+	FlushFileBuffers(pipe);
+
+	if (!ReadFile(pipe, (LPVOID)&result, sizeof(DWORD), &read, NULL))
 	{
-		windows_shared_memory shm(open_only, WEASEL_IPC_SHARED_MEMORY, read_only);
-		mapped_region region(shm, read_only, 0, WEASEL_IPC_METADATA_SIZE);
-		IPCMetadata *metadata = reinterpret_cast<IPCMetadata*>(region.get_address());
-		if (!metadata || wcsncmp(metadata->server_window_class, windowClass, IPCMetadata::WINDOW_CLASS_LENGTH))
-		{
-			return NULL;
+		if ((errCode = GetLastError()) != ERROR_MORE_DATA) {
+			return 0;
 		}
-		return reinterpret_cast<HWND>(metadata->server_hwnd);
+		char *buffer_ptr = buffer.get();
+		memset(buffer_ptr, 0, WEASEL_IPC_BUFFER_SIZE);
+		if (!ReadFile(pipe, buffer_ptr, WEASEL_IPC_BUFFER_SIZE, &read, NULL)) {
+			return 0;
+		}
 	}
-	catch (interprocess_exception& /*ex*/)
-	{
-		return NULL;
-	}
-	return NULL;
+
+	return result;
 }
 
-// weasel::Client
 
 Client::Client() 
 	: m_pImpl(new ClientImpl())
