@@ -28,18 +28,10 @@ typedef enum MONITOR_DPI_TYPE {
 	MDT_DEFAULT = MDT_EFFECTIVE_DPI
 } MONITOR_DPI_TYPE;
 
-inline bool IsWindows8Point1OrGreater()
-{
-	OSVERSIONINFOEX osvi = {sizeof(osvi), 6, 3, 0, 0, {0}, 0, 0};
-	return VerifyVersionInfo(&osvi, VER_MAJORVERSION | VER_MINORVERSION | VER_SERVICEPACKMAJOR,
-		VerSetConditionMask(VerSetConditionMask(VerSetConditionMask(
-			0, VER_MAJORVERSION, VER_GREATER_EQUAL),
-			   VER_MINORVERSION, VER_GREATER_EQUAL),
-			   VER_SERVICEPACKMAJOR, VER_GREATER_EQUAL)) != FALSE;
-}
-
 int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lpstrCmdLine, int nCmdShow)
 {
+	InitVersion();
+
 	// Set DPI awareness (Windows 8.1+)
 	if (IsWindows8Point1OrGreater())
 	{

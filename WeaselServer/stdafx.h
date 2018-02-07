@@ -22,7 +22,8 @@
   #pragma comment(linker, "/NODEFAULTLIB:atlthunk.lib")
 #endif // _WTL_SUPPORT_SDK_ATL3
 
-#include <atl.h>
+#include <atlbase.h>
+#include <atlwin.h>
 
 // Support for VS2005 Express & SDK ATL
 #ifdef _WTL_SUPPORT_SDK_ATL3
@@ -40,24 +41,12 @@
   };
 #endif // _WTL_SUPPORT_SDK_ATL3
 
-#pragma warning(disable : 4996)
-
 #include <wtl/atlapp.h>
 #include <wtl/atlframe.h>
 #include <wtl/atlctrls.h>
 #include <wtl/atldlgs.h>
 
-#pragma warning(default : 4996)
-
-inline bool IsWindowsVistaOrGreater()
-{
-	OSVERSIONINFOEX osvi = {sizeof(osvi), 6, 0, 0, 0, {0}, 0, 0};
-	return VerifyVersionInfo(&osvi, VER_MAJORVERSION | VER_MINORVERSION | VER_SERVICEPACKMAJOR,
-		VerSetConditionMask(VerSetConditionMask(VerSetConditionMask(
-			0, VER_MAJORVERSION, VER_GREATER_EQUAL),
-			VER_MINORVERSION, VER_GREATER_EQUAL),
-			VER_SERVICEPACKMAJOR, VER_GREATER_EQUAL)) != FALSE;
-}
+#include <VersionHelpers.hpp>
 
 typedef HRESULT (WINAPI *PRAR)(PCWSTR, DWORD);
 
