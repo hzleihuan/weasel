@@ -7,7 +7,6 @@ if not exist %BOOST_ROOT% set nocache=1
 
 git submodule init
 git submodule update brise
-rem Temporary workaround
 appveyor DownloadFile https://ci.appveyor.com/api/projects/mrhso/librime/artifacts/rime.zip
 7z x rime.zip * -olibrime\ | find "ing archive"
 copy /Y librime\build\include\rime_*.h include\
