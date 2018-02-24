@@ -31,8 +31,6 @@ enum WEASEL_IPC_COMMAND
 
 namespace weasel
 {
-	// 为了 32 位 server 和 64 位 TSF 的兼容，这里不用 LPARAM 和 WPARAM
-	// ServerImpl 处也有一样的问题。
 	struct PipeMessage {
 		WEASEL_IPC_COMMAND Msg;
 		UINT wParam;
@@ -65,6 +63,7 @@ namespace weasel
 	// 處理請求之物件
 	struct RequestHandler
 	{
+		using EatLine = std::function<bool(std::wstring&)>;
 		RequestHandler() {}
 		virtual ~RequestHandler() {}
 		virtual void Initialize() {}
@@ -72,7 +71,7 @@ namespace weasel
 		virtual UINT FindSession(UINT session_id) { return 0; }
 		virtual UINT AddSession(LPWSTR buffer) { return 0; }
 		virtual UINT RemoveSession(UINT session_id) { return 0; }
-		virtual BOOL ProcessKeyEvent(KeyEvent keyEvent, UINT session_id, LPWSTR buffer) { return FALSE; }
+		virtual BOOL ProcessKeyEvent(KeyEvent keyEvent, UINT session_id, EatLine eat) { return FALSE; }
 		virtual void CommitComposition(UINT session_id) {}
 		virtual void ClearComposition(UINT session_id) {}
 		virtual void FocusIn(DWORD param, UINT session_id) {}
