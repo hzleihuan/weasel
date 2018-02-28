@@ -3,4 +3,4 @@
 	url = https://github.com/mrhso/librime.git
 [submodule "brise"]
 	path = brise
-	url = https://github.com/mrhso/brise.git
+	url = https://github.com/rime/brise.git
