@@ -30,9 +30,6 @@ artifacts:
   - path: output\archives\mrhso-weasel-0.9.30.0-installer.exe
     name: Weasel
 
-  - path: output\archives\mrhso-weasel-expansion-0.9.19.0.exe
-    name: Weasel Expansion
-
 branches:
   only:
   - mrhso-weasel
