@@ -1,4 +1,4 @@
-﻿; weasel installation script
+; weasel installation script
 !include FileFunc.nsh
 !include LogicLib.nsh
 !include MUI2.nsh
@@ -6,7 +6,7 @@
 
 Unicode true
 
-!define WEASEL_VERSION 0.9.30
+!define WEASEL_VERSION 0.10.0
 !define WEASEL_BUILD ${WEASEL_VERSION}.0
 
 !define WEASEL_ROOT $INSTDIR\weasel-${WEASEL_VERSION}
