@@ -152,7 +152,7 @@ copy %WEASEL_ROOT%\LICENSE.txt output\
 copy %WEASEL_ROOT%\README.md output\README.txt
 set brise_dir=brise
 set rime_dir=output/data
-bash brise/rime-install
+bash brise/rime-install :all
 call :build_opencc_data
 exit /b
 

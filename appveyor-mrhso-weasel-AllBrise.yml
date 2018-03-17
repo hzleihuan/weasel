@@ -27,9 +27,9 @@ after_build:
   - appveyor.after_build.bat
 
 artifacts:
-  - path: output\archives\mrhso-weasel-0.10.0.0-installer.exe
+  - path: output\archives\mrhso-weasel-AllBrise-0.10.0.0-installer.exe
     name: Weasel
 
 branches:
   only:
-  - mrhso-weasel
+  - mrhso-weasel-AllBrise
