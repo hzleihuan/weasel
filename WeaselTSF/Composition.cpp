@@ -348,9 +348,6 @@ void WeaselTSF::_UpdateComposition(ITfContext *pContext)
 /* Composition State */
 STDAPI WeaselTSF::OnCompositionTerminated(TfEditCookie ecWrite, ITfComposition *pComposition)
 {
-	if (_IsComposing()) {
-		m_client.FocusOut();
-	}
 	if (_pComposition != NULL)
 	{
 		_pComposition->Release();
