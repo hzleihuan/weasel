@@ -4,6 +4,7 @@
 #include <StringAlgorithm.hpp>
 #include <WeaselCommon.h>
 #include <msctf.h>
+#include <strsafe.h>
 
 
 // {A3F4CDED-B1E9-41EE-9CA6-7B4D0DE6CB0A}
@@ -14,8 +15,6 @@ static const GUID c_clsidTextService =
 static const GUID c_guidProfile = 
 { 0x3d02cab6, 0x2b8e, 0x4781, { 0xba, 0x20, 0x1c, 0x92, 0x67, 0x52, 0x94, 0x67 } };
 
-
-using boost::filesystem::wpath;
 
 BOOL copy_file(const std::wstring& src, const std::wstring& dest)
 {
@@ -54,50 +53,67 @@ BOOL delete_file(const std::wstring& file)
 	return ret;
 }
 
-typedef int (*ime_register_func)(const wpath& ime_path, bool register_ime, bool is_wow64, bool hant, bool silent);
-
-int install_ime_file(wpath& srcPath, const std::wstring& ext, bool hant, bool silent, ime_register_func func)
+BOOL is_wow64()
 {
-	wpath destPath;
-	wpath wow64Path;
+	DWORD errorCode;
+	if (GetSystemWow64DirectoryW(NULL, 0) == 0)
+		if ((errorCode = GetLastError()) == ERROR_CALL_NOT_IMPLEMENTED)
+			return FALSE;
+		else
+			ExitProcess((UINT)errorCode);
+	else
+		return TRUE;
+}
 
+typedef BOOL (WINAPI *PW64DW64FR)(PVOID *);
+typedef BOOL (WINAPI *PW64RW64FR)(PVOID);
+typedef int (*ime_register_func)(const std::wstring& ime_path, bool register_ime, bool is_wow64, bool hant, bool silent);
+
+int install_ime_file(std::wstring& srcPath, const std::wstring& ext, bool hant, bool silent, ime_register_func func)
+{
 	WCHAR path[MAX_PATH];
-	GetModuleFileName(GetModuleHandle(NULL), path, _countof(path));
-	srcPath = path;
+	GetModuleFileNameW(GetModuleHandle(NULL), path, _countof(path));
 
-	bool is_x64 = (sizeof(HANDLE) == 8);
 	std::wstring srcFileName = (hant ? L"weaselt" : L"weasel");
-	srcFileName += (is_x64 ? L"x64" + ext : ext);
-	srcPath = srcPath.remove_leaf() / srcFileName;
+	srcFileName += ext;
+	WCHAR drive[_MAX_DRIVE];
+	WCHAR dir[_MAX_DIR];
+	_wsplitpath_s(path, drive, _countof(drive), dir, _countof(dir), NULL, 0, NULL, 0);
+	srcPath = std::wstring(drive) + dir + srcFileName;
 
-	GetSystemDirectory(path, _countof(path));
-	destPath = path;
-	destPath /= L"weasel" + ext;
-
-	if (GetSystemWow64Directory(path, _countof(path)))
-	{
-		wow64Path = path;
-		wow64Path /= L"weasel" + ext;
-	}
+	GetSystemDirectoryW(path, _countof(path));
+	std::wstring destPath = std::wstring(path) + L"\\weasel" + ext;
 
 	int retval = 0;
 	// 复制 .dll/.ime 到系统目录
-	if (!copy_file(srcPath.wstring(), destPath.wstring()))
+	if (!copy_file(srcPath, destPath))
 	{
-		if (!silent) MessageBox(NULL, destPath.wstring().c_str(), L"安裝失敗", MB_ICONERROR | MB_OK);
+		if (!silent) MessageBoxW(NULL, destPath.c_str(), L"安裝失敗", MB_ICONERROR | MB_OK);
 		return 1;
 	}
 	retval += func(destPath, true, false, hant, silent);
-	if (!wow64Path.empty())
+	if (is_wow64())
 	{
-		std::wstring x86 = srcPath.wstring();
-		ireplace_last(x86, L"x64" + ext, ext);
-		if (!copy_file(x86, wow64Path.wstring()))
+		ireplace_last(srcPath, ext, L"x64" + ext);
+		PVOID OldValue = NULL;
+		PW64DW64FR fnWow64DisableWow64FsRedirection = (PW64DW64FR)GetProcAddress(GetModuleHandle(_T("kernel32.dll")), "Wow64DisableWow64FsRedirection");
+		PW64RW64FR fnWow64RevertWow64FsRedirection = (PW64RW64FR)GetProcAddress(GetModuleHandle(_T("kernel32.dll")), "Wow64RevertWow64FsRedirection");
+		if (fnWow64DisableWow64FsRedirection == NULL || fnWow64DisableWow64FsRedirection(&OldValue) == FALSE)
 		{
-			if (!silent) MessageBox(NULL, wow64Path.wstring().c_str(), L"安裝失敗", MB_ICONERROR | MB_OK);
+			if (!silent) MessageBoxW(NULL, L"無法取消文件系統重定向", L"安裝失敗", MB_ICONERROR | MB_OK);
 			return 1;
 		}
-		retval += func(wow64Path, true, true, hant, silent);
+		if (!copy_file(srcPath, destPath))
+		{
+			if (!silent) MessageBoxW(NULL, destPath.c_str(), L"安裝失敗", MB_ICONERROR | MB_OK);
+			return 1;
+		}
+		retval += func(destPath, true, true, hant, silent);
+		if (fnWow64RevertWow64FsRedirection == NULL || fnWow64RevertWow64FsRedirection(OldValue) == FALSE)
+		{
+			if (!silent) MessageBoxW(NULL, L"無法恢復文件系統重定向", L"安裝失敗", MB_ICONERROR | MB_OK);
+			return 1;
+		}
 	}
 	return retval;
 }
@@ -106,31 +122,42 @@ int uninstall_ime_file(const std::wstring& ext, bool silent, ime_register_func f
 {
 	int retval = 0;
 	WCHAR path[MAX_PATH];
-	GetSystemDirectory(path, _countof(path));
-	wpath imePath = path;
-	imePath /= L"weasel" + ext;
+	GetSystemDirectoryW(path, _countof(path));
+	std::wstring imePath(path);
+	imePath += L"\\weasel" + ext;
 	retval += func(imePath, false, false, false, silent);
-	if (!delete_file(imePath.wstring()))
+	if (!delete_file(imePath))
 	{
-		if (!silent) MessageBox(NULL, imePath.wstring().c_str(), L"卸載失敗", MB_ICONERROR | MB_OK);
+		if (!silent) MessageBox(NULL, imePath.c_str(), L"卸載失敗", MB_ICONERROR | MB_OK);
 		retval += 1;
 	}
-	if (GetSystemWow64Directory(path, _countof(path)))
+	if (is_wow64())
 	{
-		wpath wow64Path = path;
-		wow64Path /= L"weasel" + ext;
-		retval += func(wow64Path, false, true, false, silent);
-		if (!delete_file(wow64Path.wstring()))
+		retval += func(imePath, false, true, false, silent);
+		PVOID OldValue = NULL;
+		PW64DW64FR fnWow64DisableWow64FsRedirection = (PW64DW64FR)GetProcAddress(GetModuleHandle(_T("kernel32.dll")), "Wow64DisableWow64FsRedirection");
+		PW64RW64FR fnWow64RevertWow64FsRedirection = (PW64RW64FR)GetProcAddress(GetModuleHandle(_T("kernel32.dll")), "Wow64RevertWow64FsRedirection");
+		if (fnWow64DisableWow64FsRedirection == NULL || fnWow64DisableWow64FsRedirection(&OldValue) == FALSE)
 		{
-			if (!silent) MessageBox(NULL, wow64Path.wstring().c_str(), L"卸載失敗", MB_ICONERROR | MB_OK);
+			if (!silent) MessageBoxW(NULL, L"無法取消文件系統重定向", L"卸載失敗", MB_ICONERROR | MB_OK);
+			return 1;
+		}
+		if (!delete_file(imePath))
+		{
+			if (!silent) MessageBoxW(NULL, imePath.c_str(), L"卸載失敗", MB_ICONERROR | MB_OK);
 			retval += 1;
+		}
+		if (fnWow64RevertWow64FsRedirection == NULL || fnWow64RevertWow64FsRedirection(OldValue) == FALSE)
+		{
+			if (!silent) MessageBoxW(NULL, L"無法恢復文件系統重定向", L"卸載失敗", MB_ICONERROR | MB_OK);
+			return 1;
 		}
 	}
 	return retval;
 }
 
 // 注册IME输入法
-int register_ime(const wpath& ime_path, bool register_ime, bool is_wow64, bool hant, bool silent)
+int register_ime(const std::wstring& ime_path, bool register_ime, bool is_wow64, bool hant, bool silent)
 {
 	if (is_wow64)
 	{
@@ -142,7 +169,7 @@ int register_ime(const wpath& ime_path, bool register_ime, bool is_wow64, bool h
 
 	if (register_ime)
 	{
-		HKL hKL = ImmInstallIME(ime_path.wstring().c_str(), WEASEL_IME_NAME);
+		HKL hKL = ImmInstallIME(ime_path.c_str(), WEASEL_IME_NAME);
 		if (!hKL)
 		{
 			// manually register ime
@@ -151,9 +178,9 @@ int register_ime(const wpath& ime_path, bool register_ime, bool is_wow64, bool h
 			LSTATUS ret = RegOpenKey(HKEY_LOCAL_MACHINE, KEYBOARD_LAYOUTS_KEY, &hKey);
 			if (ret == ERROR_SUCCESS)
 			{
-				for (DWORD k = 0xE0200000 + (hant ? 0x0404 : 0x0804); true; k += 0x10000)
+				for (DWORD k = 0xE0200000 + (hant ? 0x0404 : 0x0804); k <= 0xE0FF0804; k += 0x10000)
 				{
-					wsprintf(hkl_str, L"%08X", k);
+					StringCchPrintfW(hkl_str, _countof(hkl_str), L"%08X", k);
 					HKEY hSubKey;
 					ret = RegOpenKey(hKey, hkl_str, &hSubKey);
 					if (ret == ERROR_SUCCESS)
@@ -220,7 +247,7 @@ int register_ime(const wpath& ime_path, bool register_ime, bool is_wow64, bool h
 		{
 			DWORD dwErr = GetLastError();
 			WCHAR msg[100];
-			wsprintf(msg, L"註冊輸入法錯誤 ImmInstallIME: HKL=%x Err=%x", hKL, dwErr);
+			StringCchPrintfW(msg, _countof(msg), L"註冊輸入法錯誤 ImmInstallIME: HKL=%x Err=%x", hKL, dwErr);
 			if (!silent) MessageBox(NULL, msg, L"安裝失敗", MB_ICONERROR | MB_OK);
 			return 1;
 		}
@@ -339,12 +366,14 @@ void enable_profile(BOOL fEnable, bool hant) {
 }
 
 // 注册TSF输入法
-int register_text_service(const wpath& tsf_path, bool register_ime, bool is_wow64, bool hant, bool silent)
+int register_text_service(const std::wstring& tsf_path, bool register_ime, bool is_wow64, bool hant, bool silent)
 {
+	using RegisterServerFunction = HRESULT (STDAPICALLTYPE *)();
+
 	if (!register_ime)
 		enable_profile(FALSE, hant);
 
-	std::wstring params = L" \"" + tsf_path.wstring() + L"\"";
+	std::wstring params = L" \"" + tsf_path + L"\"";
 	if (!register_ime)
 	{
 		params = L" /u " + params;  // unregister
@@ -353,8 +382,7 @@ int register_text_service(const wpath& tsf_path, bool register_ime, bool is_wow6
 	{
 		params = L" /s " + params;
 	}
-
-	SHELLEXECUTEINFO shExInfo = {0};
+	SHELLEXECUTEINFOW shExInfo = { 0 };
 	shExInfo.cbSize = sizeof(shExInfo);
 	shExInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
 	shExInfo.hwnd = 0;
@@ -363,9 +391,8 @@ int register_text_service(const wpath& tsf_path, bool register_ime, bool is_wow6
 	shExInfo.lpParameters = params.c_str();    // Additional parameters
 	shExInfo.lpDirectory = 0;
 	shExInfo.nShow = SW_SHOW;
-	shExInfo.hInstApp = 0;  
-
-	if (ShellExecuteEx(&shExInfo))
+	shExInfo.hInstApp = 0;
+	if (ShellExecuteExW(&shExInfo))
 	{
 		WaitForSingleObject(shExInfo.hProcess, INFINITE);
 		CloseHandle(shExInfo.hProcess);
@@ -373,8 +400,8 @@ int register_text_service(const wpath& tsf_path, bool register_ime, bool is_wow6
 	else
 	{
 		WCHAR msg[100];
-		wsprintf(msg, L"註冊輸入法錯誤 regsvr32.exe %s", params.c_str());
-		if (!silent) MessageBox(NULL, msg, L"安装/卸載失败", MB_ICONERROR | MB_OK);
+		StringCchPrintfW(msg, _countof(msg), L"註冊輸入法錯誤 regsvr32.exe %s", params.c_str());
+		if (!silent) MessageBoxW(NULL, msg, L"安装/卸載失败", MB_ICONERROR | MB_OK);
 		return 1;
 	}
 
@@ -386,7 +413,7 @@ int register_text_service(const wpath& tsf_path, bool register_ime, bool is_wow6
 
 int install(bool hant, bool silent)
 {
-	wpath ime_src_path;
+	std::wstring ime_src_path;
 	int retval = 0;
 	retval += install_ime_file(ime_src_path, L".ime", hant, silent, &register_ime);
 	retval += install_ime_file(ime_src_path, L".dll", hant, silent, &register_text_service);
@@ -394,14 +421,18 @@ int install(bool hant, bool silent)
 	// 写注册表
 	HKEY hKey;
 	LSTATUS ret = RegCreateKeyEx(HKEY_LOCAL_MACHINE, WEASEL_REG_KEY,
-		                         0, NULL, 0, KEY_ALL_ACCESS | KEY_WOW64_32KEY, 0, &hKey, NULL);
+		                         0, NULL, 0, KEY_ALL_ACCESS, 0, &hKey, NULL);
 	if (FAILED(HRESULT_FROM_WIN32(ret)))
 	{
 		if (!silent) MessageBox(NULL, WEASEL_REG_KEY, L"安裝失敗", MB_ICONERROR | MB_OK);
 		return 1;
 	}
 
-	std::wstring rootDir = ime_src_path.parent_path().wstring();
+	WCHAR drive[_MAX_DRIVE];
+	WCHAR dir[_MAX_DIR];
+	_wsplitpath_s(ime_src_path.c_str(), drive, _countof(drive), dir, _countof(dir), NULL, 0, NULL, 0);
+	std::wstring rootDir = std::wstring(drive) + dir;
+	rootDir.pop_back();
 	ret = RegSetValueEx(hKey, L"WeaselRoot", 0, REG_SZ,
 		                (const BYTE*)rootDir.c_str(),
 						(rootDir.length() + 1) * sizeof(WCHAR));
@@ -451,7 +482,7 @@ int uninstall(bool silent)
 bool has_installed() {
 	WCHAR path[MAX_PATH];
 	GetSystemDirectory(path, _countof(path));
-	wpath imePath = path;
-	imePath /= L"weasel.ime";
-	return boost::filesystem::exists(imePath);
+	std::wstring sysPath(path);
+	DWORD attr = GetFileAttributesW((sysPath + L"\\weasel.ime").c_str());
+	return (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY));
 }

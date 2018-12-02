@@ -3,6 +3,8 @@
 #include "WeaselTSF.h"
 #include "WeaselCommon.h"
 #include "CandidateList.h"
+#include "LanguageBar.h"
+#include "Compartment.h"
 #include "ResponseParser.h"
 
 static void error_message(const WCHAR *msg)
@@ -20,21 +22,16 @@ WeaselTSF::WeaselTSF()
 {
 	_cRef = 1;
 
-	_pThreadMgr = NULL;
-
 	_dwThreadMgrEventSinkCookie = TF_INVALID_COOKIE;
 
-	_pTextEditSinkContext = NULL;
 	_dwTextEditSinkCookie = TF_INVALID_COOKIE;
 	_dwTextLayoutSinkCookie = TF_INVALID_COOKIE;
 	_fTestKeyDownPending = FALSE;
 	_fTestKeyUpPending = FALSE;
 
-	_pComposition = NULL;
-
 	_fCUASWorkaroundTested = _fCUASWorkaroundEnabled = FALSE;
 
-	_cand = std::make_unique<weasel::CandidateList>(this);
+	_cand = new CCandidateList(this);
 
 	DllAddRef();
 }
@@ -104,7 +101,7 @@ STDAPI WeaselTSF::Deactivate()
 {
 	m_client.EndSession();
 
-	_InitTextEditSink(NULL);
+	_InitTextEditSink(com_ptr<ITfDocumentMgr>());
 
 	_UninitThreadMgrEventSink();
 
@@ -113,11 +110,9 @@ STDAPI WeaselTSF::Deactivate()
 
 	_UninitLanguageBar();
 
-	if (_pThreadMgr != NULL)
-	{
-		_pThreadMgr->Release();
-		_pThreadMgr = NULL;
-	}
+	_UninitCompartment();
+
+	_pThreadMgr = NULL;
 
 	_tfClientId = TF_CLIENTID_NULL;
 
@@ -128,20 +123,18 @@ STDAPI WeaselTSF::Deactivate()
 
 STDAPI WeaselTSF::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId, DWORD dwFlags)
 {
+	com_ptr<ITfDocumentMgr> pDocMgrFocus;
 	_activateFlags = dwFlags;
 
 	_pThreadMgr = pThreadMgr;
-	_pThreadMgr->AddRef();
 	_tfClientId = tfClientId;
 
 	if (!_InitThreadMgrEventSink())
 		goto ExitError;
 
-	ITfDocumentMgr *pDocMgrFocus;
 	if ((_pThreadMgr->GetFocus(&pDocMgrFocus) == S_OK) && (pDocMgrFocus != NULL))
 	{
 		_InitTextEditSink(pDocMgrFocus);
-		pDocMgrFocus->Release();
 	}
 
 	if (!_InitKeyEventSink())
@@ -150,13 +143,14 @@ STDAPI WeaselTSF::ActivateEx(ITfThreadMgr *pThreadMgr, TfClientId tfClientId, DW
 	if (!_InitPreservedKey())
 		goto ExitError;
 
-	// TODO not yet complete
-	_pLangBarButton = NULL;
 	if (!_InitLanguageBar())
 		goto ExitError;
 
 	if (!_IsKeyboardOpen())
 		_SetKeyboardOpen(TRUE);
+
+	if (!_InitCompartment())
+		goto ExitError;
 
 	_EnsureServerConnected();
 
@@ -177,6 +171,22 @@ STDMETHODIMP WeaselTSF::OnKillThreadFocus()
 	return S_OK;
 }
 
+STDMETHODIMP WeaselTSF::OnActivated(REFCLSID clsid, REFGUID guidProfile, BOOL isActivated)
+{
+	if (!IsEqualCLSID(clsid, c_clsidTextService))
+	{
+		return S_OK;
+	}
+
+	if (isActivated) {
+		_ShowLanguageBar(TRUE);
+	}
+	else {
+		_DeleteCandidateList();
+		_ShowLanguageBar(FALSE);
+	}
+	return S_OK;
+}
 
 void WeaselTSF::_EnsureServerConnected()
 {
@@ -185,11 +195,10 @@ void WeaselTSF::_EnsureServerConnected()
 		m_client.Disconnect();
 		m_client.Connect(NULL);
 		m_client.StartSession();
-		weasel::Status status;
-		weasel::ResponseParser parser(NULL, NULL, &status, NULL, &_cand->style());
+		weasel::ResponseParser parser(NULL, NULL, &_status, NULL, &_cand->style());
 		bool ok = m_client.GetResponseData(std::ref(parser));
 		if (ok) {
-			_UpdateLanguageBar(status);
+			_UpdateLanguageBar(_status);
 		}
 	}
 }

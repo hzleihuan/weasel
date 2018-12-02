@@ -2,27 +2,22 @@
 
 #include "WeaselTSF.h"
 #include "CandidateList.h"
-#include <ComPtr.h>
 
 using namespace std;
 using namespace weasel;
 
-CandidateList::CandidateList(WeaselTSF * pTextService)
+CCandidateList::CCandidateList(com_ptr<WeaselTSF> pTextService)
 	: _ui(make_unique<UI>())
-	, _curp(NULL)
+	, _tsf(pTextService)
+	, _pbShow(TRUE)
 {
-	//_ui->Create(NULL);
 	_cRef = 1;
-	_tsf = pTextService;
-	_tsf->AddRef();
 }
 
-CandidateList::~CandidateList()
-{
-	_tsf->Release();
-}
+CCandidateList::~CCandidateList()
+{}
 
-STDMETHODIMP CandidateList::QueryInterface(REFIID riid, void ** ppvObj)
+STDMETHODIMP CCandidateList::QueryInterface(REFIID riid, void ** ppvObj)
 {
 	if (ppvObj == nullptr)
 	{
@@ -52,12 +47,12 @@ STDMETHODIMP CandidateList::QueryInterface(REFIID riid, void ** ppvObj)
 	return E_NOINTERFACE;
 }
 
-STDMETHODIMP_(ULONG) CandidateList::AddRef(void)
+STDMETHODIMP_(ULONG) CCandidateList::AddRef(void)
 {
 	return ++_cRef;
 }
 
-STDMETHODIMP_(ULONG) CandidateList::Release(void)
+STDMETHODIMP_(ULONG) CCandidateList::Release(void)
 {
 	LONG cr = --_cRef;
 
@@ -71,7 +66,7 @@ STDMETHODIMP_(ULONG) CandidateList::Release(void)
 	return cr;
 }
 
-STDMETHODIMP CandidateList::GetDescription(BSTR * pbstr)
+STDMETHODIMP CCandidateList::GetDescription(BSTR * pbstr)
 {
 	static auto str = SysAllocString(L"Candidate List");
 	if (pbstr)
@@ -81,14 +76,14 @@ STDMETHODIMP CandidateList::GetDescription(BSTR * pbstr)
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::GetGUID(GUID * pguid)
+STDMETHODIMP CCandidateList::GetGUID(GUID * pguid)
 {
 	/// 36c3c795-7159-45aa-ab12-30229a51dbd3
 	*pguid = { 0x36c3c795, 0x7159, 0x45aa, { 0xab, 0x12, 0x30, 0x22, 0x9a, 0x51, 0xdb, 0xd3 } };
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::Show(BOOL showCandidateWindow)
+STDMETHODIMP CCandidateList::Show(BOOL showCandidateWindow)
 {
 	if (showCandidateWindow)
 		_ui->Show();
@@ -97,13 +92,13 @@ STDMETHODIMP CandidateList::Show(BOOL showCandidateWindow)
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::IsShown(BOOL * pIsShow)
+STDMETHODIMP CCandidateList::IsShown(BOOL * pIsShow)
 {
 	*pIsShow = _ui->IsShown();
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::GetUpdatedFlags(DWORD * pdwFlags)
+STDMETHODIMP CCandidateList::GetUpdatedFlags(DWORD * pdwFlags)
 {
 	if (!pdwFlags)
 		return E_INVALIDARG;
@@ -112,30 +107,34 @@ STDMETHODIMP CandidateList::GetUpdatedFlags(DWORD * pdwFlags)
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::GetDocumentMgr(ITfDocumentMgr ** ppdim)
+STDMETHODIMP CCandidateList::GetDocumentMgr(ITfDocumentMgr ** ppdim)
 {
 	*ppdim = nullptr;
-	if ((_tsf->_pThreadMgr->GetFocus(ppdim) == S_OK) && (*ppdim != nullptr))
+	auto pThreadMgr = _tsf->_GetThreadMgr();
+	if (pThreadMgr == nullptr)
 	{
-		return S_OK;
+		return E_FAIL;
 	}
-
-	return E_FAIL;
+	if (FAILED(pThreadMgr->GetFocus(ppdim)) || (*ppdim == nullptr))
+	{
+		return E_FAIL;
+	}
+	return S_OK;
 }
 
-STDMETHODIMP CandidateList::GetCount(UINT * pCandidateCount)
+STDMETHODIMP CCandidateList::GetCount(UINT * pCandidateCount)
 {
 	*pCandidateCount = _ui->ctx().cinfo.candies.size();
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::GetSelection(UINT * pSelectedCandidateIndex)
+STDMETHODIMP CCandidateList::GetSelection(UINT * pSelectedCandidateIndex)
 {
 	*pSelectedCandidateIndex = _ui->ctx().cinfo.highlighted;
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::GetString(UINT uIndex, BSTR * pbstr)
+STDMETHODIMP CCandidateList::GetString(UINT uIndex, BSTR * pbstr)
 {
 	*pbstr = nullptr;
 	auto &cinfo = _ui->ctx().cinfo;
@@ -148,7 +147,7 @@ STDMETHODIMP CandidateList::GetString(UINT uIndex, BSTR * pbstr)
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::GetPageIndex(UINT * pIndex, UINT uSize, UINT * puPageCnt)
+STDMETHODIMP CCandidateList::GetPageIndex(UINT * pIndex, UINT uSize, UINT * puPageCnt)
 {
 	if (!puPageCnt)
 		return E_INVALIDARG;
@@ -162,67 +161,67 @@ STDMETHODIMP CandidateList::GetPageIndex(UINT * pIndex, UINT uSize, UINT * puPag
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::SetPageIndex(UINT * pIndex, UINT uPageCnt)
+STDMETHODIMP CCandidateList::SetPageIndex(UINT * pIndex, UINT uPageCnt)
 {
 	if (!pIndex)
 		return E_INVALIDARG;
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::GetCurrentPage(UINT * puPage)
+STDMETHODIMP CCandidateList::GetCurrentPage(UINT * puPage)
 {
-	*puPage = _ui->ctx().cinfo.currentPage;
+	*puPage = 0;
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::SetSelection(UINT nIndex)
+STDMETHODIMP CCandidateList::SetSelection(UINT nIndex)
 {
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::Finalize(void)
+STDMETHODIMP CCandidateList::Finalize(void)
 {
 	Destroy();
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::Abort(void)
+STDMETHODIMP CCandidateList::Abort(void)
 {
 	_tsf->_AbortComposition(true);
 	Destroy();
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::SetIntegrationStyle(GUID guidIntegrationStyle)
+STDMETHODIMP CCandidateList::SetIntegrationStyle(GUID guidIntegrationStyle)
 {
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::GetSelectionStyle(TfIntegratableCandidateListSelectionStyle * ptfSelectionStyle)
+STDMETHODIMP CCandidateList::GetSelectionStyle(TfIntegratableCandidateListSelectionStyle * ptfSelectionStyle)
 {
 	*ptfSelectionStyle = _selectionStyle;
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::OnKeyDown(WPARAM wParam, LPARAM lParam, BOOL * pIsEaten)
+STDMETHODIMP CCandidateList::OnKeyDown(WPARAM wParam, LPARAM lParam, BOOL * pIsEaten)
 {
 	*pIsEaten = TRUE;
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::ShowCandidateNumbers(BOOL * pIsShow)
+STDMETHODIMP CCandidateList::ShowCandidateNumbers(BOOL * pIsShow)
 {
 	*pIsShow = TRUE;
 	return S_OK;
 }
 
-STDMETHODIMP CandidateList::FinalizeExactCompositionString()
+STDMETHODIMP CCandidateList::FinalizeExactCompositionString()
 {
 	_tsf->_AbortComposition(false);
 	return E_NOTIMPL;
 }
 
-void CandidateList::UpdateUI(const Context & ctx, const Status & status)
+void CCandidateList::UpdateUI(const Context & ctx, const Status & status)
 {
 	if (_ui->style().inline_preedit) {
 		_ui->style().client_caps |= weasel::INLINE_PREEDIT_CAPABLE;
@@ -233,99 +232,172 @@ void CandidateList::UpdateUI(const Context & ctx, const Status & status)
 
 	/// In UWP, candidate window will only be shown
 	/// if it is owned by active view window
-	_UpdateOwner();
+	//_UpdateOwner();
 	_ui->Update(ctx, status);
+	if (_pbShow == FALSE)
+		_UpdateUIElement();
 
 	if (status.composing)
-		_StartUI();
+		Show(_pbShow);
 	else
-		_EndUI();
+		Show(FALSE);
 }
 
-void CandidateList::UpdateStyle(const UIStyle & sty)
+void CCandidateList::UpdateStyle(const UIStyle & sty)
 {
 	_ui->style() = sty;
 }
 
-void CandidateList::UpdateInputPosition(RECT const & rc)
+void CCandidateList::UpdateInputPosition(RECT const & rc)
 {
 	_ui->UpdateInputPosition(rc);
 }
 
-void CandidateList::Destroy()
+void CCandidateList::Destroy()
 {
-	Show(false);
-	_ui->Destroy();
-	_curp = NULL;
+	//EndUI();
+	Show(FALSE);
+	_DisposeUIWindow();
 }
 
-UIStyle & CandidateList::style()
+UIStyle & CCandidateList::style()
 {
-	return _ui->style();
+	//return _ui->style();
+	return _style;
 }
 
-void CandidateList::_UpdateOwner()
+HWND CCandidateList::_GetActiveWnd()
 {
-	HWND actw = _GetActiveWnd();
-	if (actw != _curp) {
-		UIStyle sty = _ui->style();
-		_ui->Destroy();
-		_ui->Create(actw);
-		_curp = actw;
-		_ui->style() = sty;
-	}
-}
+	com_ptr<ITfDocumentMgr> pDocumentMgr;
+	com_ptr<ITfContext> pContext;
+	com_ptr<ITfContextView> pContextView;
+	com_ptr<ITfThreadMgr> pThreadMgr = _tsf->_GetThreadMgr();
 
-HWND CandidateList::_GetActiveWnd()
-{
-	ComPtr<ITfDocumentMgr> dmgr;
-	ComPtr<ITfContext> ctx;
-	ComPtr<ITfContextView> view;
 	HWND w = NULL;
 
-	if (FAILED(_tsf->_pThreadMgr->GetFocus(dmgr.GetAddressOf()))) {
-		goto Exit;
-	}
-	if (FAILED(dmgr->GetTop(ctx.GetAddressOf()))) {
-		goto Exit;
-	}
-	if (FAILED(ctx->GetActiveView(view.GetAddressOf()))) {
-		goto Exit;
+	// Reset current context
+	_pContextDocument = nullptr;
+
+	if (pThreadMgr != nullptr
+		&& SUCCEEDED(pThreadMgr->GetFocus(&pDocumentMgr))
+		&& SUCCEEDED(pDocumentMgr->GetTop(&pContext))
+		&& SUCCEEDED(pContext->GetActiveView(&pContextView)))
+	{
+		// Set current context
+		_pContextDocument = pContext;
+		pContextView->GetWnd(&w);
 	}
 
-	view->GetWnd(&w);
-
-Exit:
 	if (w == NULL) w = ::GetFocus();
 	return w;
 }
 
-void CandidateList::_StartUI()
+HRESULT CCandidateList::_UpdateUIElement()
 {
-	BOOL pbShow = TRUE;
-	ComPtr<ITfUIElementMgr> emgr;
-	_tsf->_pThreadMgr->QueryInterface(emgr.GetAddressOf());
+	HRESULT hr = S_OK;
 
-	if (emgr) {
-		if (!_ui->IsShown())
-			emgr->BeginUIElement(this, &pbShow, &uiid);
-		emgr->UpdateUIElement(uiid);
+	com_ptr<ITfUIElementMgr> pUIElementMgr;
+	com_ptr<ITfThreadMgr> pThreadMgr = _tsf->_GetThreadMgr();
+	if (nullptr == pThreadMgr)
+	{
+		return S_OK;
+	}
+	hr = pThreadMgr->QueryInterface(IID_ITfUIElementMgr, (void **)&pUIElementMgr);
+
+	if (hr == S_OK)
+	{
+		pUIElementMgr->UpdateUIElement(uiid);
 	}
 
-	Show(pbShow);
+	return S_OK;
 }
 
-void CandidateList::_EndUI()
+void CCandidateList::StartUI()
 {
-	ComPtr<ITfUIElementMgr> emgr;
-	_tsf->_pThreadMgr->QueryInterface(emgr.GetAddressOf());
-	if (emgr)
+	com_ptr<ITfThreadMgr> pThreadMgr = _tsf->_GetThreadMgr();
+	com_ptr<ITfUIElementMgr> pUIElementMgr;
+	auto hr = pThreadMgr->QueryInterface(&pUIElementMgr);
+	if (FAILED(hr))
+		return;
+
+	if (pUIElementMgr == NULL)
+	{
+		return;
+	}
+
+	pUIElementMgr->BeginUIElement(this, &_pbShow, &uiid);
+	//pUIElementMgr->UpdateUIElement(uiid);
+	if (_pbShow)
+	{
+		_ui->style() = _style;
+		_MakeUIWindow();
+	}
+}
+
+void CCandidateList::EndUI()
+{
+	com_ptr<ITfThreadMgr> pThreadMgr = _tsf->_GetThreadMgr();
+	com_ptr<ITfUIElementMgr> emgr;
+	auto hr = pThreadMgr->QueryInterface(&emgr);
+	if (FAILED(hr))
+		return;
+	if (emgr != NULL)
 		emgr->EndUIElement(uiid);
-	if (_ui->IsShown())
-		Show(false);
+	_DisposeUIWindow();
+}
+
+com_ptr<ITfContext> CCandidateList::GetContextDocument()
+{
+	return _pContextDocument;
+}
+
+void CCandidateList::_DisposeUIWindow()
+{
+	if (_ui == nullptr)
+	{
+		return;
+	}
+
+	_ui->Destroy();
+}
+
+void CCandidateList::_MakeUIWindow()
+{
+	HWND p = _GetActiveWnd();
+	_ui->Create(p);
 }
 
 void WeaselTSF::_UpdateUI(const Context & ctx, const Status & status)
 {
 	_cand->UpdateUI(ctx, status);
+}
+
+void WeaselTSF::_StartUI()
+{
+	_cand->StartUI();
+}
+
+void WeaselTSF::_EndUI()
+{
+	_cand->EndUI();
+}
+
+void WeaselTSF::_ShowUI()
+{
+	_cand->Show(TRUE);
+}
+
+void WeaselTSF::_HideUI()
+{
+	_cand->Show(FALSE);
+}
+
+com_ptr<ITfContext> WeaselTSF::_GetUIContextDocument()
+{
+	return _cand->GetContextDocument();
+}
+
+void WeaselTSF::_DeleteCandidateList()
+{
+	_cand->Destroy();
 }

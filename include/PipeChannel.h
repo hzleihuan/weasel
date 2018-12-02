@@ -11,7 +11,7 @@ namespace weasel {
 	public:
 		using Stream = boost::interprocess::wbufferstream;
 
-		PipeChannelBase(std::wstring &pn_cmd, size_t bs, SECURITY_ATTRIBUTES *s);
+		PipeChannelBase(std::wstring &&pn_cmd, size_t bs, SECURITY_ATTRIBUTES *s);
 		PipeChannelBase(PipeChannelBase &&r);
 		~PipeChannelBase();
 
@@ -70,8 +70,8 @@ namespace weasel {
 		};
 
 	public:
-		PipeChannel(std::wstring &pn_cmd, SECURITY_ATTRIBUTES *s = NULL, size_t bs = 4 * 1024)
-			: PipeChannelBase(pn_cmd, bs, s)
+		PipeChannel(std::wstring &&pn_cmd, SECURITY_ATTRIBUTES *s = NULL, size_t bs = 4 * 1024)
+			: PipeChannelBase(std::move(pn_cmd), bs, s)
 		{}
 
 	public:
@@ -127,7 +127,7 @@ namespace weasel {
 			}
 
 			// Use whole buffer to receive data in client
-			return handler((LPWSTR)buffer.get(), buff_size * sizeof(char) / sizeof(wchar_t));
+			return handler((LPWSTR)buffer.get(), (UINT)(buff_size * sizeof(char) / sizeof(wchar_t)));
 		}
 
 

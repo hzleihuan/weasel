@@ -15,10 +15,11 @@
 #include <msctf.h>
 #include <assert.h>
 
-// #include <boost/filesystem.hpp>
+#include <atlcomcli.h> 
 
 #include <map>
 #include <memory>
 #include <string>
 
-// using boost::filesystem::wpath;
+template<typename I>
+using com_ptr = CComPtr<I>;
