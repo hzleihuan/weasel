@@ -109,32 +109,49 @@ STDAPI WeaselTSF::OnPreservedKey(ITfContext *pContext, REFGUID rguid, BOOL *pfEa
 
 BOOL WeaselTSF::_InitKeyEventSink()
 {
-	ITfKeystrokeMgr *pKeystrokeMgr;
+	com_ptr<ITfKeystrokeMgr> pKeystrokeMgr;
 	HRESULT hr;
 
-	if (_pThreadMgr->QueryInterface(IID_ITfKeystrokeMgr, (void **) &pKeystrokeMgr) != S_OK)
+	if (_pThreadMgr->QueryInterface(&pKeystrokeMgr) != S_OK)
 		return FALSE;
 
 	hr = pKeystrokeMgr->AdviseKeyEventSink(_tfClientId, (ITfKeyEventSink *) this, TRUE);
-	pKeystrokeMgr->Release();
 	
 	return (hr == S_OK);
 }
 
 void WeaselTSF::_UninitKeyEventSink()
 {
-	ITfKeystrokeMgr *pKeystrokeMgr;
+	com_ptr<ITfKeystrokeMgr> pKeystrokeMgr;
 	
-	if (_pThreadMgr->QueryInterface(IID_ITfKeystrokeMgr, (void **) &pKeystrokeMgr) != S_OK)
+	if (_pThreadMgr->QueryInterface(&pKeystrokeMgr) != S_OK)
 		return;
 
 	pKeystrokeMgr->UnadviseKeyEventSink(_tfClientId);
-	pKeystrokeMgr->Release();
 }
 
 BOOL WeaselTSF::_InitPreservedKey()
 {
 	return TRUE;
+#if 0
+	com_ptr<ITfKeystrokeMgr> pKeystrokeMgr;
+	if (_pThreadMgr->QueryInterface(pKeystrokeMgr.GetAddressOf()) != S_OK)
+	{
+		return FALSE;
+	}
+	TF_PRESERVEDKEY preservedKeyImeMode;
+
+	/* Define SHIFT ONLY for now */
+	preservedKeyImeMode.uVKey = VK_SHIFT;
+	preservedKeyImeMode.uModifiers = TF_MOD_ON_KEYUP;
+
+	auto hr = pKeystrokeMgr->PreserveKey(
+		_tfClientId,
+		GUID_IME_MODE_PRESERVED_KEY,
+		&preservedKeyImeMode, L"", 0);
+	
+	return SUCCEEDED(hr);
+#endif
 }
 
 void WeaselTSF::_UninitPreservedKey()

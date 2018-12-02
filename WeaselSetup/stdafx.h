@@ -23,6 +23,6 @@
 #include <wtl/atlmisc.h>
 #include <wtl/atldlgs.h>
 
-#include <boost/filesystem.hpp>
-
 // TODO: reference additional headers your program requires here
+
+#include <string>

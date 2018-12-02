@@ -3,6 +3,7 @@
 #include "Globals.h"
 #include "Register.h"
 #include "WeaselTSF.h"
+#include <VersionHelpers.hpp>
 
 void DllAddRef()
 {
@@ -111,6 +112,7 @@ STDAPI DllCanUnloadNow()
 
 STDAPI DllRegisterServer()
 {
+	InitVersion();
 	if (!RegisterServer() || !RegisterProfiles() || !RegisterCategories())
 	{
 		DllUnregisterServer();
