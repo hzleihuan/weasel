@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "Register.h"
+#include <strsafe.h>
 #include <VersionHelpers.hpp>
 
 #define CLSID_STRLEN 38  // strlen("{xxxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxx}")
@@ -12,8 +13,20 @@ static const char c_szModelName[] = "ThreadingModel";
 BOOL RegisterProfiles()
 {
 	WCHAR achIconFile[MAX_PATH];
-	ULONG cchIconFile = GetModuleFileNameW(g_hInst, achIconFile, ARRAYSIZE(achIconFile));
+	char achFileNameA[MAX_PATH];
+	DWORD cchA;
+	int cchIconFile;
 	HRESULT hr;
+	
+	cchA = GetModuleFileNameA(g_hInst, achFileNameA, ARRAYSIZE(achFileNameA));
+	cchIconFile = MultiByteToWideChar(CP_ACP, 0, achFileNameA, cchA, achIconFile, ARRAYSIZE(achIconFile) - 1);
+	achIconFile[cchIconFile] = '\0';
+	
+	ITfInputProcessorProfiles *pInputProcessorProfiles;
+	hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles, NULL, CLSCTX_INPROC_SERVER,
+		IID_ITfInputProcessorProfiles, (void **) &pInputProcessorProfiles);
+	if (hr != S_OK)
+		return E_FAIL;
 
 	hr = pInputProcessorProfiles->Register(c_clsidTextService);
 	if (hr != S_OK)
