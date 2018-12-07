@@ -26,7 +26,7 @@ build_script:
   - .\build.bat data hant installer
 
 artifacts:
-  - path: output\archives\mrhso-weasel-0.12.0.0-installer.exe
+  - path: output\archives\mrhso-weasel-RimeTW-0.12.0.0-installer.exe
     name: Weasel
 
 branches:
