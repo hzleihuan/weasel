@@ -10,91 +10,41 @@ static const char c_szTipKeyPrefix[] = "Software\\Microsft\\CTF\\TIP\\";
 static const char c_szInProcSvr32[] = "InprocServer32";
 static const char c_szModelName[] = "ThreadingModel";
 
-HKL FindIME()
-{
-	HKL hKL = NULL;
-	WCHAR key[9];
-	HKEY hKey;
-	LSTATUS ret = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts", 0, KEY_READ, &hKey);
-	if (ret == ERROR_SUCCESS)
-	{
-		for (DWORD id = (0xE0200000 | TEXTSERVICE_LANGID); hKL == NULL && id <= (0xE0FF0000 | TEXTSERVICE_LANGID); id += 0x10000)
-		{
-			StringCchPrintfW(key, _countof(key), L"%08X", id);
-			HKEY hSubKey;
-			ret = RegOpenKeyExW(hKey, key, 0, KEY_READ, &hSubKey);
-			if (ret == ERROR_SUCCESS)
-			{
-				WCHAR data[32];
-				DWORD type;
-				DWORD size = sizeof data;
-				ret = RegQueryValueExW(hSubKey, L"Ime File", NULL, &type, (LPBYTE)data, &size);
-				if (ret == ERROR_SUCCESS && type == REG_SZ && _wcsicmp(data, L"weasel.ime") == 0)
-					hKL = (HKL)id;
-			}
-			RegCloseKey(hSubKey);
-		}
-	}
-	RegCloseKey(hKey);
-	return hKL;
-}
-
 BOOL RegisterProfiles()
 {
 	WCHAR achIconFile[MAX_PATH];
-	ULONG cchIconFile = GetModuleFileNameW(g_hInst, achIconFile, ARRAYSIZE(achIconFile));
+	char achFileNameA[MAX_PATH];
+	DWORD cchA;
+	int cchIconFile;
 	HRESULT hr;
+	
+	cchA = GetModuleFileNameA(g_hInst, achFileNameA, ARRAYSIZE(achFileNameA));
+	cchIconFile = MultiByteToWideChar(CP_ACP, 0, achFileNameA, cchA, achIconFile, ARRAYSIZE(achIconFile) - 1);
+	achIconFile[cchIconFile] = '\0';
+	
+	ITfInputProcessorProfiles *pInputProcessorProfiles;
+	hr = CoCreateInstance(CLSID_TF_InputProcessorProfiles, NULL, CLSCTX_INPROC_SERVER,
+		IID_ITfInputProcessorProfiles, (void **) &pInputProcessorProfiles);
+	if (hr != S_OK)
+		return E_FAIL;
 
-	if (IsWindows8OrGreater())
-	{
-		CComPtr<ITfInputProcessorProfileMgr> pInputProcessorProfileMgr;
-		hr = pInputProcessorProfileMgr.CoCreateInstance(CLSID_TF_InputProcessorProfiles, NULL, CLSCTX_ALL);
-		if (FAILED(hr))
-			return FALSE;
+	hr = pInputProcessorProfiles->Register(c_clsidTextService);
+	if (hr != S_OK)
+		goto Exit;
 
-		hr = pInputProcessorProfileMgr->RegisterProfile(
-			c_clsidTextService,
-			TEXTSERVICE_LANGID,
-			c_guidProfile,
-			TEXTSERVICE_DESC,
-			(ULONG)wcslen(TEXTSERVICE_DESC),
-			achIconFile,
-			cchIconFile,
-			TEXTSERVICE_ICON_INDEX,
-			FindIME(),
-			0,
-			TRUE,
-			0);
-	}
-	else
-	{
-		CComPtr<ITfInputProcessorProfiles> pInputProcessorProfiles;
-		hr = pInputProcessorProfiles.CoCreateInstance(CLSID_TF_InputProcessorProfiles, NULL, CLSCTX_INPROC_SERVER);
-		if (FAILED(hr))
-			return FALSE;
+	hr = pInputProcessorProfiles->AddLanguageProfile(
+		c_clsidTextService,
+		TEXTSERVICE_LANGID,
+		c_guidProfile,
+		TEXTSERVICE_DESC,
+		(ULONG) wcslen(TEXTSERVICE_DESC),
+		achIconFile,
+		cchIconFile,
+		TEXTSERVICE_ICON_INDEX);
 
-		hr = pInputProcessorProfiles->Register(c_clsidTextService);
-		if (FAILED(hr))
-			return FALSE;
-
-		hr = pInputProcessorProfiles->AddLanguageProfile(
-			c_clsidTextService,
-			TEXTSERVICE_LANGID,
-			c_guidProfile,
-			TEXTSERVICE_DESC,
-			(ULONG)wcslen(TEXTSERVICE_DESC),
-			achIconFile,
-			cchIconFile,
-			TEXTSERVICE_ICON_INDEX);
-		if (FAILED(hr))
-			return FALSE;
-
-		hr = pInputProcessorProfiles->SubstituteKeyboardLayout(
-			c_clsidTextService, TEXTSERVICE_LANGID, c_guidProfile, FindIME());
-		if (FAILED(hr))
-			return FALSE;
-	}
-	return TRUE;
+Exit:
+	pInputProcessorProfiles->Release();
+	return (hr == S_OK);
 }
 
 void UnregisterProfiles()
@@ -107,8 +57,6 @@ void UnregisterProfiles()
 	if (FAILED(hr))
 		return;
 
-	pInputProcessProfiles->SubstituteKeyboardLayout(
-		c_clsidTextService, TEXTSERVICE_LANGID, c_guidProfile, NULL);
 	pInputProcessProfiles->Unregister(c_clsidTextService);
 	pInputProcessProfiles->Release();
 }
