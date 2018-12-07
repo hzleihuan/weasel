@@ -26,9 +26,9 @@ build_script:
   - .\build.bat data hant installer
 
 artifacts:
-  - path: output\archives\mrhso-weasel-AllBrise-0.12.0.0-installer.exe
+  - path: output\archives\mrhso-weasel-AllBrise-CombineRevert-0.12.0.0-installer.exe
     name: Weasel
 
 branches:
   only:
-  - mrhso-weasel-AllBrise
+  - mrhso-weasel-AllBrise-CombineRevert
