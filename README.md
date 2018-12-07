@@ -5,7 +5,7 @@
 
 式恕堂 版權所無
 
-[![Download](https://api.bintray.com/packages/rime/weasel/release/images/download.svg)](https://bintray.com/rime/weasel/release/_latestVersion) [![Build status](https://ci.appveyor.com/api/projects/status/r92k3nss502w7ojn?svg=true)](https://ci.appveyor.com/project/mrhso/weasel) [![Coverity Scan Build Status](https://scan.coverity.com/projects/rime-weasel/badge.svg)](https://scan.coverity.com/projects/rime-weasel)
+[![Download](https://api.bintray.com/packages/mrhso/weasel/mrhso-weasel/images/download.svg)](https://bintray.com/mrhso/weasel/mrhso-weasel/release/_latestVersion) [![Build status](https://ci.appveyor.com/api/projects/status/r92k3nss502w7ojn?svg=true)](https://ci.appveyor.com/project/mrhso/weasel) [![Coverity Scan Build Status](https://scan.coverity.com/projects/rime-weasel/badge.svg)](https://scan.coverity.com/projects/rime-weasel)
 
 授權條款：GPLv3
 
